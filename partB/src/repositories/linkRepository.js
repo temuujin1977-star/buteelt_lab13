@@ -26,7 +26,7 @@ export class LinkRepository {
 
   async create({ originalUrl, shortCode, expiresAt = null }) {
     const db = await this.dbPromise;
-    const result = await db.run(
+    await db.run(
       `INSERT INTO links (original_url, short_code, expires_at)
        VALUES (?, ?, ?)`,
       originalUrl,
@@ -47,5 +47,16 @@ export class LinkRepository {
     );
 
     return this.findByCode(shortCode);
+  }
+
+  async deleteByCode(shortCode) {
+    const db = await this.dbPromise;
+    const result = await db.run(
+      `DELETE FROM links
+       WHERE short_code = ?`,
+      shortCode
+    );
+
+    return result.changes > 0;
   }
 }

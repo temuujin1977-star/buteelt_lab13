@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { LinkRepository } from "../src/repositories/linkRepository.js";
 import {
+  LinkConflictError,
   LinkExpiredError,
   LinkNotFoundError,
   LinkService,
   LinkValidationError,
   generateShortCode,
+  normalizeCustomCode,
   normalizeExpiration,
   normalizeUrl
 } from "../src/services/linkService.js";
@@ -39,6 +41,14 @@ describe("link service helpers", () => {
   it("accepts empty expiration as no expiration", () => {
     expect(normalizeExpiration("")).toBeNull();
   });
+
+  it("accepts safe custom short codes", () => {
+    expect(normalizeCustomCode(" my-code_123 ")).toBe("my-code_123");
+  });
+
+  it("rejects unsafe custom short codes", () => {
+    expect(() => normalizeCustomCode("../admin")).toThrow(LinkValidationError);
+  });
 });
 
 describe("link repository", () => {
@@ -59,6 +69,17 @@ describe("link repository", () => {
       clicks: 1
     });
   });
+
+  it("deletes links by short code", async () => {
+    const repository = new LinkRepository(openDatabase(":memory:"));
+    await repository.create({
+      originalUrl: "https://example.com/delete",
+      shortCode: "delete1"
+    });
+
+    await expect(repository.deleteByCode("delete1")).resolves.toBe(true);
+    await expect(repository.findByCode("delete1")).resolves.toBeUndefined();
+  });
 });
 
 describe("link service", () => {
@@ -78,5 +99,49 @@ describe("link service", () => {
     const service = new LinkService(repository);
 
     await expect(service.getRedirectTarget("expired")).rejects.toThrow(LinkExpiredError);
+  });
+
+  it("creates links with a custom short code", async () => {
+    const service = new LinkService(new LinkRepository(openDatabase(":memory:")));
+
+    const link = await service.createLink({
+      url: "https://example.com/custom",
+      customCode: "custom-1"
+    });
+
+    expect(link).toMatchObject({
+      originalUrl: "https://example.com/custom",
+      shortCode: "custom-1"
+    });
+  });
+
+  it("rejects duplicate custom short codes", async () => {
+    const service = new LinkService(new LinkRepository(openDatabase(":memory:")));
+    await service.createLink({
+      url: "https://example.com/first",
+      customCode: "same-code"
+    });
+
+    await expect(
+      service.createLink({
+        url: "https://example.com/second",
+        customCode: "same-code"
+      })
+    ).rejects.toThrow(LinkConflictError);
+  });
+
+  it("returns stats for an existing short code", async () => {
+    const service = new LinkService(new LinkRepository(openDatabase(":memory:")));
+    await service.createLink({
+      url: "https://example.com/stats",
+      customCode: "stats-1"
+    });
+
+    const link = await service.getLinkStats("stats-1", "http://localhost:3000");
+
+    expect(link).toMatchObject({
+      shortCode: "stats-1",
+      shortUrl: "http://localhost:3000/stats-1"
+    });
   });
 });

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  LinkConflictError,
   LinkExpiredError,
   LinkNotFoundError,
   LinkService,
@@ -22,10 +23,28 @@ export function createLinkRouter(service = new LinkService()) {
     }
   });
 
+  router.get("/:shortCode", async (req, res, next) => {
+    try {
+      const link = await service.getLinkStats(req.params.shortCode, getBaseUrl(req));
+      res.json({ link });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/", async (req, res, next) => {
     try {
       const link = await service.createLink(req.body, getBaseUrl(req));
       res.status(201).json({ link });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete("/:shortCode", async (req, res, next) => {
+    try {
+      await service.deleteLink(req.params.shortCode);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }
@@ -52,6 +71,10 @@ export function createRedirectRouter(service = new LinkService()) {
 export function linkErrorHandler(error, req, res, next) {
   if (error instanceof LinkValidationError) {
     return res.status(400).json({ error: error.message });
+  }
+
+  if (error instanceof LinkConflictError) {
+    return res.status(409).json({ error: error.message });
   }
 
   if (error instanceof LinkNotFoundError) {

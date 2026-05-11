@@ -31,6 +31,36 @@ describe("link API", () => {
     expect(listResponse.body.links[0].shortCode).toBe(createResponse.body.link.shortCode);
   });
 
+  it("creates a short link with a custom code", async () => {
+    const app = createTestApp();
+
+    const response = await request(app)
+      .post("/api/links")
+      .send({ url: "https://example.com/custom", customCode: "docs-2026" })
+      .expect(201);
+
+    expect(response.body.link).toMatchObject({
+      originalUrl: "https://example.com/custom",
+      shortCode: "docs-2026"
+    });
+  });
+
+  it("returns 409 for duplicate custom codes", async () => {
+    const app = createTestApp();
+
+    await request(app)
+      .post("/api/links")
+      .send({ url: "https://example.com/one", customCode: "duplicate" })
+      .expect(201);
+
+    const response = await request(app)
+      .post("/api/links")
+      .send({ url: "https://example.com/two", customCode: "duplicate" })
+      .expect(409);
+
+    expect(response.body.error).toBe("Short code is already in use");
+  });
+
   it("redirects to the original URL and increments clicks", async () => {
     const app = createTestApp();
     const createResponse = await request(app)
@@ -53,6 +83,31 @@ describe("link API", () => {
     const response = await request(app).post("/api/links").send({ url: "not-a-url" }).expect(400);
 
     expect(response.body.error).toBe("url must be a valid absolute URL");
+  });
+
+  it("returns link stats by short code", async () => {
+    const app = createTestApp();
+    await request(app)
+      .post("/api/links")
+      .send({ url: "https://example.com/stats", customCode: "stats-api" });
+
+    const response = await request(app).get("/api/links/stats-api").expect(200);
+
+    expect(response.body.link).toMatchObject({
+      originalUrl: "https://example.com/stats",
+      shortCode: "stats-api",
+      clicks: 0
+    });
+  });
+
+  it("deletes a short link", async () => {
+    const app = createTestApp();
+    await request(app)
+      .post("/api/links")
+      .send({ url: "https://example.com/delete", customCode: "delete-api" });
+
+    await request(app).delete("/api/links/delete-api").expect(204);
+    await request(app).get("/delete-api").expect(404);
   });
 
   it("returns 410 for expired links", async () => {

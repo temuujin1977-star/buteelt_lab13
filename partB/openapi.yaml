@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: URL Shortener API
-  version: 0.2.0
-  description: Part B checkpoint 2 implementation for a small URL shortener.
+  version: 0.3.0
+  description: Part B checkpoint 3 implementation for a small URL shortener.
 servers:
   - url: http://localhost:3000
 paths:
@@ -54,6 +54,12 @@ paths:
                   type: string
                   format: date-time
                   nullable: true
+                customCode:
+                  type: string
+                  minLength: 3
+                  maxLength: 32
+                  pattern: "^[a-zA-Z0-9_-]+$"
+                  example: my-link
       responses:
         "201":
           description: Short URL created
@@ -66,6 +72,42 @@ paths:
                     $ref: "#/components/schemas/Link"
         "400":
           description: Invalid request body
+        "409":
+          description: Custom short code is already in use
+  /api/links/{shortCode}:
+    get:
+      summary: Get link stats by short code
+      parameters:
+        - name: shortCode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Link stats response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  link:
+                    $ref: "#/components/schemas/Link"
+        "404":
+          description: Short URL not found
+    delete:
+      summary: Delete short link by short code
+      parameters:
+        - name: shortCode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Link deleted
+        "404":
+          description: Short URL not found
   /{shortCode}:
     get:
       summary: Redirect to original URL
