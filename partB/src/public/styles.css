@@ -10,3 +10,28 @@ main {
   margin: 48px auto;
   padding: 0 24px;
 }
+
+label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.form-row {
+  display: flex;
+  gap: 8px;
+}
+
+input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+button {
+  padding: 10px 16px;
+}
+
+li {
+  margin-bottom: 10px;
+}

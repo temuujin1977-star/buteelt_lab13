@@ -4,3 +4,4 @@ node_modules/
 partB/data/
 coverage/
 .DS_Store
+*.log

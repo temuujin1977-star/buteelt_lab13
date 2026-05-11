@@ -9,7 +9,18 @@
   <body>
     <main>
       <h1>URL Shortener</h1>
-      <p>Minimal frontend will be completed in checkpoint 3.</p>
+      <form id="shorten-form">
+        <label for="url">Long URL</label>
+        <div class="form-row">
+          <input id="url" name="url" type="url" placeholder="https://example.com/article" required />
+          <button type="submit">Shorten</button>
+        </div>
+      </form>
+      <p id="message" role="status"></p>
+      <section>
+        <h2>Saved links</h2>
+        <ul id="links"></ul>
+      </section>
     </main>
     <script src="/app.js"></script>
   </body>

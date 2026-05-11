@@ -1,12 +1,13 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { linkRouter } from "./routes/linkRoutes.js";
+import { LinkService } from "./services/linkService.js";
+import { createLinkRouter, createRedirectRouter, linkErrorHandler } from "./routes/linkRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export function createApp() {
+export function createApp({ service = new LinkService() } = {}) {
   const app = express();
 
   app.use(express.json());
@@ -16,7 +17,9 @@ export function createApp() {
     res.json({ status: "ok" });
   });
 
-  app.use("/api/links", linkRouter);
+  app.use("/api/links", createLinkRouter(service));
+  app.use(createRedirectRouter(service));
+  app.use(linkErrorHandler);
 
   return app;
 }
