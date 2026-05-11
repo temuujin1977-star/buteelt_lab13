@@ -1,0 +1,25 @@
+openapi: 3.0.3
+info:
+  title: URL Shortener API
+  version: 0.1.0
+  description: Part B checkpoint 1 skeleton. Endpoint details will be completed after implementation.
+servers:
+  - url: http://localhost:3000
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Server is running
+  /api/links:
+    get:
+      summary: List links
+      responses:
+        "200":
+          description: Link list response
+    post:
+      summary: Create short URL
+      responses:
+        "501":
+          description: Endpoint placeholder in checkpoint 1
