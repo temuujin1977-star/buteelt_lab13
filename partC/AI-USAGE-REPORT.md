@@ -106,3 +106,54 @@ AI-ийн гаргасан санал болгоныг шууд зөв гэж ү
 ## 6. Checkpoint 1-ийн дүгнэлт
 
 Part B-ийн үндсэн implementation test-ээр баталгаажсан бөгөөд Reflect хэсгийн эхний checkpoint дээр AI ашиглалтын бодит тэмдэглэлийг эхлүүлэв. Дараагийн checkpoint дээр hallucination/security жишээг тусад нь бичиж, AI-ийн санал буруу эсвэл дутуу байж болох нөхцөлийг тайлбарлана. Мөн ADR-002 дээр build явцад гарсан нэг чухал архитектурын шийдвэрийг тусгаж, self-evaluation дээр өөрийн сурсан зүйл, AI-гүйгээр хийж чадах эсэх, дараагийн удаа юуг өөрөөр хийх талаар хариулна.
+
+## 7. Checkpoint 2 - Hallucination болон security/license шалгалт
+
+Энэ checkpoint-ийн зорилго нь AI-ийн гаргасан санал, code, documentation-ийг шууд үнэн гэж авахгүй байх явдал юм. AI project-ийн context-ийг сайн уншсан мэт хариулж болох ч заримдаа байхгүй API, байхгүй файл, эсвэл тухайн package-ийн бодит behavior-т таарахгүй санал гаргах боломжтой. Тиймээс Part B дээр AI-ийн санал бүрийг local code, test, official package behavior, project-ийн шаардлагатай харьцуулж шалгасан.
+
+### 7.1 Hallucination жишээ 1 - Байхгүй эсвэл тохироогүй endpoint санал болгох эрсдэл
+
+URL shortener-ийн API-г өргөтгөх талаар AI-аас тусламж авахад stats endpoint-ийг `/api/stats/:shortCode` гэх мэт тусдаа route хэлбэрээр хийх боломжтой гэж санал болгож болох байсан. Энэ нь өөрөө буруу биш боловч манай project-ийн өмнөх бүтэцтэй бүрэн нийцэхгүй. Учир нь Part B дээр link-тэй холбоотой бүх API `partB/src/routes/linkRoutes.js` дотор `/api/links` prefix-ийн доор байрлаж байсан. Хэрэв AI-ийн саналыг шууд дагаад `/api/stats/:shortCode` гэж хийсэн бол OpenAPI, README, frontend, tests бүгд өөр өөр naming convention-той болж, project жижиг мөртлөө route structure нь задрах байсан.
+
+Үүнийг шалгахдаа одоо байгаа `createLinkRouter` болон `createRedirectRouter`-ийн бүтэц уншсан. Link жагсаах, үүсгэх endpoint аль хэдийн `/api/links` доор байсан тул stats endpoint-ийг `GET /api/links/:shortCode` болгож сонгосон. Ингэснээр API naming илүү нэгэн жигд болсон. Энэ бол AI-ийн гаргаж болох "ажиллаж магадгүй" саналыг project-ийн context дээр дахин шүүсэн жишээ юм.
+
+Энэ жишээнээс авсан сургамж: AI-ийн санал нь syntax-ийн хувьд боломжтой байсан ч project-ийн convention-т таарч байгаа эсэхийг хүн өөрөө шийдэх хэрэгтэй. "Код ажиллаж байна" гэдэг нь "архитектурын хувьд зөв байрласан" гэсэн үг биш.
+
+### 7.2 Hallucination жишээ 2 - Database эсвэл library behavior-ийг буруу төсөөлөх эрсдэл
+
+SQLite repository дээр delete feature нэмэх үед AI query бичиж өгөхдөө заримдаа database driver-ийн return утгыг буруу төсөөлөх магадлалтай. Жишээ нь `DELETE FROM links WHERE short_code = ?` query ажиллуулсны дараа устсан мөрийн тоог `result.rowCount` гэж шалгах санал гарч болох байсан. Гэхдээ энэ project дээр `sqlite` package ашиглаж байгаа бөгөөд `db.run()`-ийн үр дүнд `changes` property ашиглагдана. Хэрэв `rowCount` гэж бичсэн бол code syntax error өгөхгүй байж болох ч `undefined` тул delete logic үргэлж false болох эсвэл буруу ажиллах эрсдэлтэй.
+
+Үүнийг шалгахдаа repository-ийн өмнөх `create` болон `incrementClicks` method-уудын pattern-ийг харсан. Мөн delete behavior-ийг test-ээр баталгаажуулсан. `LinkRepository.deleteByCode()` method нь `result.changes > 0` буцаадаг болсон. Дараа нь `linkService.test.js` дээр link үүсгээд delete хийсний дараа `findByCode` undefined болж байгаа эсэхийг шалгасан. API түвшинд мөн `DELETE /api/links/delete-api` дараа `GET /delete-api` нь `404` буцаах test нэмсэн.
+
+Энэ жишээнээс авсан сургамж: AI package-ийн API-г ерөнхий мэдлэгээр тааж бичиж болно. Гэхдээ бодит project дээр ямар package, ямар wrapper, ямар return shape ашиглаж байгааг code болон test-ээр баталгаажуулах хэрэгтэй.
+
+### 7.3 Security жишээ - Custom short code validation
+
+Checkpoint 3 дээр custom short code feature нэмэхэд security талаас хамгийн анхаарах зүйл нь хэрэглэгчийн өгсөн `customCode`-ийг шууд URL path болгон ашиглаж байгаа явдал байсан. Хэрэв ямар ч validation хийхгүй бол хэрэглэгч `../admin`, `api/links`, `hello world`, `?x=1`, эсвэл маш урт string өгч болно. Энэ нь заавал шууд exploit болно гэсэн үг биш ч routing, logging, documentation, frontend display, future file/path usage дээр эрсдэл үүсгэнэ.
+
+AI-аас тусламж авахдаа custom code-д зөвшөөрөх тэмдэгтийн хүрээг хязгаарлах хэрэгтэй гэж гарсан. Үүнийг project-д тохируулж `^[a-zA-Z0-9_-]{3,32}$` pattern сонгосон. Ингэснээр зөвхөн үсэг, тоо, `_`, `-` зөвшөөрөгдөнө. Мөн уртыг 3-32 гэж хязгаарласан. Энэ шийдвэр нь хэт нарийн биш боловч лабораторийн URL shortener-д хангалттай хамгаалалт гэж үзсэн.
+
+Security шалгалт болгон `normalizeCustomCode("../admin")` нь `LinkValidationError` шидэх test нэмсэн. Мөн duplicate custom code дээр `409 Conflict` буцаах болгосон. Энэ нь security гэхээсээ илүү data integrity хамгаалалт боловч хэрэглэгчийн custom alias давхардаж өөр хүний link-ийг overwrite хийхээс сэргийлэх чухал logic юм. Манай implementation overwrite хийхгүй, давхардсан code дээр шинэ row үүсгэхгүй.
+
+Энэ хэсэгт AI-ийн тусламж хэрэгтэй байсан шалтгаан нь custom input-ийн эрсдэлийг эхэндээ зөвхөн "давхардал байна уу" гэж харах магадлалтай байсан. AI review маягаар асуухад path-like string, урт input, зөвшөөрөх character set зэрэг нэмэлт эрсдэлийг бодож үзэхэд тус болсон. Гэхдээ эцсийн pattern болон test-ийг project-ийн хэрэгцээнд тааруулж өөрөө баталгаажуулсан.
+
+### 7.4 License/package жишээ - Dependency шинээр нэмэхээс зайлсхийсэн
+
+AI-аас URL shortener хийхэд slug эсвэл nanoid package ашиглаж болно гэсэн ерөнхий санал гарч болох байсан. `nanoid` гэх мэт package нь бодит project-д сайн сонголт байж болох ч энэ лабораторийн project дээр аль хэдийн Node.js-ийн built-in `crypto.randomBytes` ашиглан 7 тэмдэгттэй short code үүсгэж байсан. Шинэ dependency нэмэх нь package-lock өөрчлөх, license шалгах, багшид тайлбарлах нэмэлт ажил үүсгэнэ.
+
+Тиймээс checkpoint 3 дээр custom code feature нэмэхдээ шинэ external package нэмээгүй. Random code generation нь өмнөх `generateShortCode()` helper-оор хэвээр үлдсэн. Custom code validation-д JavaScript-ийн regex хангалттай байсан. Энэ нь license risk-ийг багасгасан шийдвэр юм. Хэрэв production project байсан бол dependency license, maintenance status, security advisory зэргийг тусад нь шалгах хэрэгтэй. Харин энэ assignment-д шаардлагагүй dependency нэмэхгүй байх нь илүү зөв гэж үзсэн.
+
+Энэ жишээнээс авсан сургамж: AI заримдаа "best practice" нэрээр илүү олон package санал болгодог. Гэхдээ жижиг лабораторийн project дээр dependency нэмэх бүр нь тайлбарлах, шалгах, засварлах зардалтай. Тиймээс built-in боломж хангалттай үед гаднын package нэмэхээс зайлсхийсэн.
+
+### 7.5 Verify, don't trust зарчим
+
+Энэ checkpoint дээр AI-тай ажиллахдаа дараах зарчмыг баримталсан.
+
+- AI-ийн санал болгосон endpoint нэрийг project-ийн route convention-той тулгаж шалгасан.
+- AI-ийн санал болгосон database behavior-ийг бодит repository pattern болон test-ээр шалгасан.
+- Custom user input дээр validation заавал байх ёстой гэж үзэж, regex болон negative test нэмсэн.
+- Шинэ dependency нэмэхээс өмнө үнэхээр хэрэгтэй эсэхийг бодсон.
+- Documentation дээр бичсэн зүйлс code-той таарч байгаа эсэхийг шалгасан.
+- Test pass болохыг local дээр `npm.cmd test` ажиллуулж баталгаажуулсан.
+
+Эдгээр жишээнээс харахад AI нь хурдан санал гаргах, edge case сануулах, draft бичихэд хэрэгтэй боловч эцсийн хариуцлага хүний талд үлддэг. Ялангуяа security, data integrity, package choice зэрэг хэсэгт AI-ийн хариултыг шууд хуулж тавих нь эрсдэлтэй. Миний хийсэн зөв арга нь AI-аар санаа гаргуулаад, дараа нь code унших, test бичих, command ажиллуулах замаар баталгаажуулах байсан.
