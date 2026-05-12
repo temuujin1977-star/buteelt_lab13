@@ -1,4 +1,4 @@
-# ADR-002: URL shortener-ийн business logic-ийг route/service/repository layer-д салгах шийдвэр
+# ADR-002: Route, service, repository гэж салгаж бичих шийдвэр
 
 ## Status
 
@@ -6,111 +6,91 @@ Accepted
 
 ## Context
 
-Part B дээр URL shortener project-ийн үндсэн feature-үүдийг хэрэгжүүлэх үед эхэндээ бүх logic-ийг Express route дотор шууд бичих боломжтой байсан. Project жижиг учраас `POST /api/links`, `GET /api/links`, `GET /:shortCode` зэрэг endpoint-уудыг нэг файлд бичвэл хурдан харагдаж магадгүй. Гэхдээ даалгаврын шаардлагад 3-аас дээш feature, 10-аас дээш test, OpenAPI documentation, AI session log, review/test workflow зэрэг зүйлс байсан. Иймээс эхний хурдан шийдлээс илүү шалгахад амар, алдаа гарахад тусгаарлаж засах боломжтой бүтэц хэрэгтэй болсон.
+Part B дээр URL shortener-ийн backend хийх үед бүх кодыг нэг route file дотор бичиж болох байсан. Project жижиг болохоор эхэндээ тэгж бичвэл хурдан юм шиг санагдсан. Гэхдээ дараа нь feature нэмэгдэх тусам код замбараагүй болох магадлалтай байсан.
 
-Build явцад дараах feature-үүд нэмэгдсэн.
+Манай project дээр дараах зүйлс орсон.
 
-- Урт URL-ээс богино URL үүсгэх.
-- Хадгалсан link-үүдийг жагсаах.
-- Богино code-оор original URL руу redirect хийх.
-- Redirect хийх бүрт click count нэмэх.
-- Expiration date шалгах.
+- URL богиносгох.
+- Link жагсаах.
+- Short code-оор redirect хийх.
+- Click count нэмэх.
+- Expired link шалгах.
 - Custom short code үүсгэх.
-- Duplicate custom code дээр `409 Conflict` буцаах.
+- Давхардсан custom code шалгах.
 - Link stats харах.
 - Link устгах.
 
-Эдгээр feature бүгдийг route дотор бичвэл route file request/response, validation, database query, business rule, error mapping зэрэг олон хариуцлагатай болох байсан. Энэ нь AI-аар generated code авах үед ч эрсдэлтэй. Учир нь AI нэг endpoint нэмэхдээ өмнөх logic-ийг давхар бичих, validation-ийг мартуулах, эсвэл database query-г route дотор тарааж бичих магадлалтай.
-
-Тиймээс Part B-ийн build явцад нэг чухал архитектурын шийдвэр гаргасан: Express route нь HTTP request/response-оо, service layer нь business logic болон validation-аа, repository layer нь SQLite query-гээ тус тус хариуцах.
+Эдгээрийг бүгдийг нь route дотор бичвэл route file хэт олон үүрэгтэй болно. Нэг газар request авах, validation хийх, database query бичих, error response буцаах гээд бүгд холилдоно. Тэгвэл test бичихэд ч төвөгтэй болно.
 
 ## Decision
 
-URL shortener-ийн implementation-д **route/service/repository layer separation** ашиглахаар шийдсэн.
+Тиймээс би кодыг 3 үндсэн layer болгон салгасан.
 
-Сонгосон бүтэц:
+- `routes`: HTTP endpoint, request/response, status code хариуцна.
+- `services`: validation болон business logic хариуцна.
+- `repositories`: SQLite database query хариуцна.
 
-- `partB/src/routes/linkRoutes.js`: HTTP endpoint, status code, response body, error mapping.
-- `partB/src/services/linkService.js`: URL validation, expiration validation, custom code validation, short code generation, business rule.
-- `partB/src/repositories/linkRepository.js`: SQLite query, create/find/list/increment/delete operation.
-- `partB/src/db/database.js`: database connection болон schema initialization.
-- `partB/tests/linkService.test.js`: service helper, repository behavior, business rule test.
-- `partB/tests/linkRoutes.test.js`: API endpoint behavior test.
+Жишээ нь:
 
-Энэ шийдвэрийн дагуу route file database-тэй шууд харьцахгүй. Service file Express response объект мэдэхгүй. Repository file HTTP status code мэдэхгүй. Ингэснээр давхарга бүр нэг тодорхой үүрэгтэй болсон.
+- `partB/src/routes/linkRoutes.js`
+- `partB/src/services/linkService.js`
+- `partB/src/repositories/linkRepository.js`
 
-## Rationale
+Route нь database query шууд бичихгүй. Service нь Express-ийн `res` object ашиглахгүй. Repository нь HTTP status code мэдэхгүй. Ингэснээр файл бүрийн үүрэг илүү тодорхой болсон.
 
-Энэ шийдвэрийг сонгосон гол шалтгаан нь test хийхэд амар байдал байсан. Жишээ нь `normalizeUrl`, `normalizeExpiration`, `normalizeCustomCode` зэрэг validation helper-үүдийг Express server асаахгүйгээр шууд unit test хийж болно. Мөн `LinkService.getRedirectTarget()` method нь expired link дээр `LinkExpiredError`, unknown code дээр `LinkNotFoundError` шидэж байгаа эсэхийг route-оос тусад нь шалгаж болно.
+## Яагаад ийм шийдвэр гаргасан бэ?
 
-Repository layer тусдаа байгаа нь SQLite query-г нэг газарт төвлөрүүлсэн. Энэ нь SQL injection эрсдэлийг багасгахад тус болсон, учир нь query-үүд parameter binding ашиглаж байна. Хэрэв query олон route дотор тарсан бол нэг endpoint дээр string interpolation ашиглах алдаа гарч магадгүй байсан.
+Нэгдүгээрт, test бичихэд амар болсон. Жишээ нь URL validation зөв ажиллаж байна уу гэдгийг server асаахгүйгээр service test дээр шалгаж болно. Мөн redirect хийхэд click count нэмэгдэж байна уу, expired link дээр error гарч байна уу гэдгийг тусад нь шалгаж болно.
 
-Route layer тусдаа байгаа нь HTTP response code-уудыг нэг газарт mapping хийх боломж өгсөн. Жишээ нь:
+Хоёрдугаарт, database query нэг газар төвлөрсөн. Ингэснээр SQL query-үүд route дотор энд тэнд тарж бичигдэхгүй. Энэ нь алдаа багасгана. Мөн SQL injection-оос хамгаалах тал дээр parameter ашиглаж байгаа эсэхийг харахад амар.
 
-- `LinkValidationError` -> `400 Bad Request`
-- `LinkConflictError` -> `409 Conflict`
-- `LinkNotFoundError` -> `404 Not Found`
-- `LinkExpiredError` -> `410 Gone`
-
-Энэ mapping service layer дотор байхгүй тул business logic нь HTTP framework-ээс бага хамааралтай болсон.
-
-AI ашигласан талаас энэ шийдвэр илүү чухал байсан. AI-аар feature нэмүүлэхэд "энэ endpoint дээр ийм logic нэм" гэж хэлэхээс илүү "service дээр business logic нэм, route дээр status mapping нэм, repository дээр query нэм" гэж хувааж хянах нь илүү найдвартай. AI-ийн гаргасан code буруу байвал аль layer дээр алдаа гарсныг test-ээр илүү хурдан олж болно.
-
-## Considered Options
-
-### Option 1: Бүх logic-ийг Express route дотор бичих
-
-Энэ хувилбар хамгийн хурдан эхлэх боломжтой. Жижиг demo project дээр ажиллаж магадгүй. Гэхдээ validation, database query, redirect logic, error response нэг файлд холилдох тул test бичихэд төвөгтэй. Мөн Part B checkpoint-ууд ахих тусам custom code, stats, delete зэрэг feature нэмэгдэхэд route file хэт томрох байсан.
-
-### Option 2: Зөвхөн route болон repository layer ашиглах
-
-Энэ хувилбарт route нь business logic-оо өөрөө хариуцаж, repository нь зөвхөн database query хийх байсан. Энэ нь эхний хувилбараас дээр боловч validation болон business rule route дотор үлдэнэ. Жишээ нь expiration шалгах logic API route-той хэт холбогдож, service-level unit test хийхэд хүндрэлтэй болно.
-
-### Option 3: Route/service/repository layer ашиглах
-
-Энэ хувилбарыг сонгосон. Project жижиг боловч даалгаврын test, review, OpenAPI, AI usage reflection шаардлагад хамгийн тохиромжтой байсан. Давхарга нэмэгдсэнээр файл олон болсон ч code унших, test бичих, AI output шалгах ажил илүү цэгцтэй болсон.
-
-## Consequences
-
-### Давуу тал
-
-- Business logic route-оос тусдаа болсон.
-- Validation helper-үүдийг unit test хийхэд амар болсон.
-- API endpoint behavior-ийг Supertest ашиглаж тусад нь шалгах боломжтой болсон.
-- SQLite query нэг repository layer-д төвлөрсөн.
-- Error-to-status mapping ойлгомжтой болсон.
-- AI-аар нэмүүлсэн code-г layer бүрээр review хийх боломжтой болсон.
-- OpenAPI documentation endpoint structure-тэй илүү амар таарсан.
-
-### Сул тал / Эрсдэл
-
-- Жижиг project-д файл олон болсон мэт харагдана.
-- Нэг feature нэмэхэд route, service, repository, test зэрэг хэд хэдэн файл өөрчлөгдөх боломжтой.
-- Layer boundary-г цаашид баримтлахгүй бол бүтэц эвдэрч магадгүй.
-- TypeScript ашиглаагүй тул object shape алдааг runtime/test дээр л барина.
+Гуравдугаарт, error status code ойлгомжтой болсон. Service дээр error шиднэ. Route дээр тэр error-ийг `400`, `404`, `409`, `410` гэх мэт response болгон хувиргана. Ингэснээр business logic болон HTTP response хоорондоо хэт холилдохгүй.
 
 ## AI ашигласан байдал
 
-Энэ ADR-ийн шийдвэрийг гаргахдаа AI-аас layer separation-ийн давуу/сул талыг асууж, URL shortener-ийн scope-д аль нь тохиромжтойг харьцуулж бодсон. AI route/service/repository бүтэц санал болгосон ч тэр саналыг шууд хуулж хэрэглээгүй. Repo-ийн шаардлага, test хийх хэрэгцээ, checkpoint-оор бага багаар build хийх workflow-той харьцуулж сонгосон.
+Энэ шийдвэрийг гаргах үед AI-аас зөвлөгөө авсан. AI route/service/repository гэж салгах нь test бичихэд амар гэж санал болгосон. Би тэр саналыг шууд хуулж аваагүй, харин project-ийн шаардлагатай харьцуулж үзсэн.
 
-AI-ийн тусламж хамгийн их хэрэг болсон хэсэг нь "жижиг project учраас хэт architecture хийх үү, эсвэл route дотор бичвэл дараа нь test хэцүү болох уу" гэсэн trade-off-ийг бодох байсан. Эцэст нь энэ project лабораторийн ажил боловч AI-assisted construction-ийн зорилго нь зөвхөн ажилладаг code биш, харин plan-build-reflect workflow харуулах учраас давхарга салгах нь зөв гэж шийдсэн.
+Даалгавар дээр test, OpenAPI, AI session log, review хийх шаардлага байсан. Тиймээс бүх code-г нэг файлд бичихээс илүү layer болгон салгах нь зөв гэж үзсэн. AI энэ trade-off-ийг бодоход тус болсон. Гэхдээ эцсийн шийдвэрийг би project-ийн хэмжээнд тохируулж сонгосон.
+
+## Өөр хувилбарууд
+
+### Бүх code-г нэг route file дотор бичих
+
+Энэ нь эхэндээ хурдан. Гэхдээ feature нэмэгдэх тусам route file томорно. Validation, database query, error handling бүгд холилдоно. Test бичихэд ч хэцүү болно.
+
+### Route болон repository хоёр layer ашиглах
+
+Энэ хувилбар арай дээр. Database query тусдаа болно. Гэхдээ validation болон business logic route дотор үлдэнэ. Тэгвэл route file бас л хэт их зүйл хариуцна.
+
+### Route, service, repository гурван layer ашиглах
+
+Энэ хувилбарыг сонгосон. Project жижиг ч test болон checkpoint-оор хөгжүүлэхэд илүү тохиромжтой байсан.
+
+## Давуу тал
+
+- Код уншихад илүү ойлгомжтой болсон.
+- Test бичихэд амар болсон.
+- Database query нэг газар төвлөрсөн.
+- Error response-ууд нэг газраас гарч байна.
+- Шинэ feature нэмэхэд хаана бичих нь тодорхой болсон.
+- AI-аар туслуулсан code-г шалгахад амар болсон.
+
+## Сул тал
+
+- Жижиг project-д файл арай олон харагдана.
+- Нэг feature нэмэхэд 2-3 файл өөрчлөх хэрэг гарна.
+- Layer-ийн зарчмаа барихгүй бол дараа нь дахиад замбараагүй болж болно.
 
 ## Verification
 
-Энэ шийдвэр зөв ажиллаж байгааг дараах байдлаар шалгасан.
+Энэ шийдвэр зөв ажиллаж байгаа эсэхийг test-ээр шалгасан.
 
-- `npm.cmd test` ажиллуулахад бүх test pass болсон.
-- `linkService.test.js` service/helper behavior-ийг route-оос тусад нь шалгаж байна.
-- `linkRoutes.test.js` endpoint behavior болон HTTP status code-уудыг шалгаж байна.
-- `openapi.yaml` route layer-ийн endpoint-уудтай таарч байна.
-- `AI-USAGE-REPORT.md` дээр AI-аар туслуулсан болон хүн өөрөө баталгаажуулсан хэсгийг тусгасан.
+```bash
+npm.cmd test
+```
 
-## Follow-up
+Үр дүн нь 24/24 pass болсон. Service test дээр validation, repository, business logic шалгагдсан. Route test дээр API endpoint болон status code шалгагдсан.
 
-Цаашид project-ийг томруулах бол дараах зүйлсийг анхаарна.
+## Дүгнэлт
 
-- TypeScript ашиглаж payload болон database row type-уудыг илүү тодорхой болгох.
-- Rate limiting, logging, request size limit зэрэг production middleware нэмэх.
-- Repository layer-д migration system нэмэх.
-- Error response format-ийг нэг стандарт schema болгох.
-- Frontend test эсвэл E2E smoke test нэмэх.
+Энэ project жижиг ч route/service/repository гэж салгасан нь зөв болсон гэж бодож байна. Хэрэв бүх logic route дотор байсан бол дараа нь custom code, stats, delete feature нэмэхэд илүү будилах байсан. Энэ шийдвэр project-ийг арай цэгцтэй, test хийхэд амар болгосон.
