@@ -70,7 +70,3 @@ partB/
   tests/
   openapi.yaml
 ```
-
-## Тайлбар
-
-Энэ README нь Part A-ийн draft хувилбар. Одоогоор implementation эхлээгүй тул build, run, test command-ууд төлөвлөгөө хэлбэртэй байна. Part B дээр working README болгон шинэчилнэ.
